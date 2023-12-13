@@ -4,27 +4,40 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { Colors } from './colors.js'
 import * as CANNON from 'cannon-es'
 
-let plane
 let scene
 let camera
-let cameraPos = 0
-let controls
 let renderer
 let sphereShape
 let sphereBody
-let planeBody
-let planeShape
-let background
 let mixer
-let previouslyAnimation = null
-let selectedAnimation = 0
 let gltfAnimations
 let keysPressed = []
 let speed = 0.0035
-let colors = [...Colors]
+let clock = new THREE.Clock()
+let oldElapsedTime = 0
+let world
 let worldMap
 let pacman
+let wallsBody = []
 
+const WALLS = [
+  {
+    height: 2/7,
+    width: 2/7,
+    length: 2/7,
+    x: 0,
+    z: 2,
+    y: -5/7
+  },
+  {
+    height: 2/7,
+    width: 2/7,
+    length: 2/7,
+    x: 0,
+    z: 2,
+    y: 8/7
+  },
+]
 const spotLights = []
 const allActions = []
 
@@ -32,118 +45,37 @@ createScene()
 createAmbientLigth()
 createSpotLight(0, 0, 20)
 loadWorld()
+loadWalls()
+loadCharacter()
 animate()
 checkInputs()
-//game()
 
 function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
-
-async function game() {
-  await sleep(2000)
-  paintTiles(colors, true)
-  await sleep(2000)
-  paintTiles([0xcccccc])
-  await sleep(2000)
-  let selectedColor = colors[Math.floor(Math.random()*colors.length)]
-  paintTiles([selectedColor])
-  await sleep(2000)
-  removeWrongTiles(selectedColor)
-  selectedTilesColor = []
-  //game()
-}
-
-function changeCamera (i) {
-  cameraPos = i
-  switch(i) {
-    case 1:
-      camera.position.set(0, 0, 10)
-      break;
-    case 2:
-      camera.position.set(0, 0, -10)
-      break;
-    case 3:
-      camera.position.set(10, 0, 0)
-      break;
-    case 4:
-      camera.position.set(-10, 0, 0)
-      break;
-    case 5:
-      camera.position.set(0, 10, 0)
-      break;
-    case 6:
-      camera.position.set(0, -10, 0)
-      break;
-  }
-  camera.lookAt(0, 0, 0)
-}
-
-function changeAnimation() {
-  if (isJumping === 1){
-    if (allActions[selectedAnimation]) allActions[selectedAnimation].reset().fadeOut(0.2)
-    if (allActions[jumpAnimation]) allActions[jumpAnimation].reset()
-      .setEffectiveTimeScale(.6)
-      .setEffectiveWeight(1)
-      .fadeIn(0.5)
-      .play()
-    isJumping = 2
-  } else if (isJumping === 2) return
-
-  if (previouslyAnimation === selectedAnimation) return
-
-
-  if (allActions[previouslyAnimation]) allActions[previouslyAnimation].reset().fadeOut(0.5)
-  if (allActions[selectedAnimation]) allActions[selectedAnimation].reset()
-    .setEffectiveTimeScale(1)
-    .setEffectiveWeight(1)
-    .fadeIn(0.5)
-    .play()
-}
-
-function startAnimation() {
-  mixer = new THREE.AnimationMixer(fallGuy)
-  gltfAnimations.forEach(a => {
-    allActions.push(mixer.clipAction(a))
-  })
-
-  
-  jumpAnimation = findAnimation('FG_Jump_Start_A')
-  lendingAnimation = findAnimation('FG_Landing_A')
-  allActions[jumpAnimation].loop = THREE.LoopOnce
-  allActions[lendingAnimation].loop = THREE.LoopOnce
-
-  mixer.addEventListener('finished', (event) => {
-    if (event.action._clip.name === 'FG_Jump_Start_A') {
-      allActions[lendingAnimation].reset().setEffectiveTimeScale(0.7).play()
-      isJumping = 0
-    }
-
-    if (event.action._clip.name === 'FG_Landing_A') {
-      allActions[selectedAnimation].reset()
-        .setEffectiveTimeScale(0.7)
-        .play()
-    }
-
-  })
-
-  allActions[0].play()
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function createScene() {
   scene = new THREE.Scene()
+  world = new CANNON.World()
+  world.gravity.set(0, 0, -9.82)
   const canvas = document.querySelector('.webgl')
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
   renderer.setSize(window.innerWidth, window.innerHeight)
   renderer.shadowMap.enabled = true
-  renderer.gammaOutput = true
-  document.body.appendChild( renderer.domElement )  
+  // renderer.outputEncoding = true
+  document.body.appendChild(renderer.domElement)
 
-  const axesHelper = new THREE.AxesHelper(5)
-  scene.add( axesHelper )
+  const axesHelper = new THREE.AxesHelper(20)
+  scene.add(axesHelper)
 
-  camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.01, 2000)
-  changeCamera(1)
+  camera = new THREE.PerspectiveCamera(
+    40,
+    window.innerWidth / window.innerHeight,
+    0.01,
+    2000
+  )
+  camera.position.set(0, 0, 10)
+  camera.lookAt(0, 0, 0)
   // controls = new OrbitControls( camera, renderer.domElement )
   // controls.minPolarAngle = Math.PI / 3
   // controls.maxPolarAngle = 0
@@ -151,13 +83,12 @@ function createScene() {
   // controls.update()
 }
 
-
 function createAmbientLigth() {
   const ambientLight = new THREE.AmbientLight(0xffffff, 1.0)
   scene.add(ambientLight)
 }
 
-function createSpotLight (x, y, z, color = 0xffffff) {
+function createSpotLight(x, y, z, color = 0xffffff) {
   const spotLight = new THREE.SpotLight(color, 0.5)
   spotLight.position.set(x, y, z)
   spotLight.angle = Math.PI / 6
@@ -173,14 +104,9 @@ function createSpotLight (x, y, z, color = 0xffffff) {
   spotLights.push(spotLight)
 }
 
-function findAnimation (name) {
-  return AnimationsMap[name]
-}
-
-
-function loadWorld () {
+function loadWorld() {
   const loader = new GLTFLoader()
-  loader.load('../../assets/world/scene.gltf', (gltf) => {
+  loader.load('../../assets/onlyWorld/Sketchfab_Scene.gltf', (gltf) => {
     //gltfAnimations = gltf.animations
     worldMap = gltf.scene
     worldMap.scale.set(1, 1, 1)
@@ -190,29 +116,80 @@ function loadWorld () {
         child.castShadow = true
       }
     })
-    pacman = worldMap.getObjectByName('Pac-Man_3')
-    //centralizar o mundo
-    const box = new THREE.Box3().setFromObject( worldMap )
-    const center = box.getCenter( new THREE.Vector3() )
-    worldMap.position.x += ( worldMap.position.x - center.x )
-    worldMap.position.y += ( worldMap.position.y - center.y )
-    worldMap.position.z += ( worldMap.position.z - center.z )
     scene.add(worldMap)
 
-    // sphereShape = new CANNON.Sphere(0)
-    // sphereBody = new CANNON.Body({
-    //   mass: 1,
-    //   position: new CANNON.Vec3(0, 5, 0),
-    //   shape: sphereShape,
-    // })
+    const planeShape = new CANNON.Box(new CANNON.Vec3(2, 2, 2))
+    const planeBody = new CANNON.Body({
+      mass: 0,
+    })
+    
+    planeBody.quaternion.setFromAxisAngle(new CANNON.Vec3(-1, 0, 0), Math.PI * 0.5)
+    planeBody.position.x = 0
+    planeBody.position.z = 0
+    planeBody.position.y = 0
 
-    // world.addBody(sphereBody)
+    planeBody.addShape(planeShape)
+    world.addBody(planeBody)
     spotLights[0].target = worldMap
   })
 }
 
-function rotateWorld () {
+function loadWalls () {
+  for(const wall of WALLS) {
+    const planeShape = new CANNON.Box(new CANNON.Vec3(wall.height, wall.width, wall.length))
+    const planeBody = new CANNON.Body({
+      mass: 0,
+    })
+    
+    planeBody.quaternion.setFromAxisAngle(new CANNON.Vec3(-1, 0, 0), Math.PI * 0.5)
+    planeBody.position.x = wall.x
+    planeBody.position.z = wall.z
+    planeBody.position.y = wall.y
+    
+    planeBody.addShape(planeShape)
+    world.addBody(planeBody)
+    wallsBody.push(planeBody)
+  }
+}
 
+function startAnimation() {
+  mixer = new THREE.AnimationMixer(pacman)
+  gltfAnimations.forEach(a => {
+    allActions.push(mixer.clipAction(a))
+  })
+
+  allActions[0].play()
+}
+
+function loadCharacter () {
+  const loader = new GLTFLoader()
+  loader.load('../../assets/pacman/scene.gltf', (gltf) => {
+    gltfAnimations = gltf.animations
+    pacman = gltf.scene
+    pacman.scale.set(0.0015, 0.0015, 0.0015)
+    pacman.traverse((child) => {
+      child.frustumCulled = false
+      if (child.isMesh) {
+        child.castShadow = true
+      }
+    })
+    pacman.position.z = 2
+    pacman.rotation.x = Math.PI /2
+    startAnimation()
+    scene.add(pacman)
+
+    sphereShape = new CANNON.Sphere(0)
+    sphereBody = new CANNON.Body({
+      mass: 1,
+      position: new CANNON.Vec3(0, 0, 2),
+      shape: sphereShape,
+    })
+
+    world.addBody(sphereBody)
+
+
+    spotLights[0].target = pacman
+  })
 }
 
 function checkInputs() {
@@ -220,31 +197,16 @@ function checkInputs() {
     for (const key of keysPressed) {
       switch (key.toLowerCase()) {
         case 'w':
-              if(cameraPos === 1) {
-                pacman.rotation.y = Math.PI/2
-              }
-              break
+          pacman.rotation.y = Math.PI
+          break
         case 's':
-              if (camera.position.z > 0) {
-                  pacman.rotation.y = -Math.PI / 2;
-                  
-                  checkCollision();
-              }
+          pacman.rotation.y = 2*Math.PI
           break
-          case 'a':
-              if (camera.position.z > 2) {
-                  pacman.rotation.y = Math.PI;
-                  
-                  checkCollision();
-              }
-          
+        case 'a':
+          pacman.rotation.y = -Math.PI / 2
           break
-          case 'd':
-              if (camera.position.z > 2) {
-                  pacman.rotation.y = 0;
-                 
-              }
-          
+        case 'd':
+          pacman.rotation.y = Math.PI /2
           break
       }
     }
@@ -257,7 +219,7 @@ window.addEventListener('keydown', (event) => {
 })
 
 window.addEventListener('keyup', (event) => {
-  keysPressed = keysPressed.filter(key => key != event.key.toLowerCase())
+  keysPressed = keysPressed.filter((key) => key != event.key.toLowerCase())
   // switch (event.key.toLowerCase()) {
   //   case 'w':
   //     break
@@ -271,20 +233,34 @@ window.addEventListener('keyup', (event) => {
 // })
 
 function animate() {
-  requestAnimationFrame( animate )
-  if (mixer) mixer.update(0.02)
+  requestAnimationFrame(animate)
+  if (mixer) mixer.update(0.006)
   
-  if(pacman && camera) {
-    if(cameraPos === 1) {
-      pacman.position.x += speed * Math.cos(pacman.rotation.y)
-      pacman.position.y += speed * Math.sin(pacman.rotation.y)
-      if(pacman.position.x >= 2) {
-        changeCamera(3)
-      } else if(pacman.position.x <= -2) {
-        changeCamera(4)
-      }
+  let ElapsedTime = clock.getElapsedTime();
+  let deltaTime = ElapsedTime - oldElapsedTime;
+  oldElapsedTime = deltaTime;
+
+  if (world) world.step(1 / 60, deltaTime, 3);
+
+  if (pacman && worldMap && sphereBody) {
+    sphereBody.position.x += speed * Math.sin(pacman.rotation.y)
+    sphereBody.position.y -= speed * Math.cos(pacman.rotation.y)
+    if (sphereBody) pacman.position.copy({ x: sphereBody.position.x, y: sphereBody.position.y, z: sphereBody.position.z })
+
+    if(pacman.position.x >= 2) {
+      sphereBody.position.x = -1.8;
+      worldMap.rotation.y -= Math.PI /2
+    } else if(pacman.position.x <=  -2) {
+      sphereBody.position.x = 1.8;
+      worldMap.rotation.y += Math.PI /2
+    } else if (pacman.position.y >= 2) {
+      sphereBody.position.y = -1.8;
+      worldMap.rotation.x += Math.PI /2
+    } else if(pacman.position.y <=  -2) {
+      sphereBody.position.y = 1.8;
+      worldMap.rotation.x -= Math.PI /2
     }
   }
-
-  renderer.render( scene, camera )
+  
+  renderer.render(scene, camera)
 }
