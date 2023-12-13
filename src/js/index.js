@@ -7,6 +7,7 @@ import * as CANNON from 'cannon-es'
 let plane
 let scene
 let camera
+let cameraPos = 0
 let controls
 let renderer
 let sphereShape
@@ -54,6 +55,31 @@ async function game() {
   removeWrongTiles(selectedColor)
   selectedTilesColor = []
   //game()
+}
+
+function changeCamera (i) {
+  cameraPos = i
+  switch(i) {
+    case 1:
+      camera.position.set(0, 0, 10)
+      break;
+    case 2:
+      camera.position.set(0, 0, -10)
+      break;
+    case 3:
+      camera.position.set(10, 0, 0)
+      break;
+    case 4:
+      camera.position.set(-10, 0, 0)
+      break;
+    case 5:
+      camera.position.set(0, 10, 0)
+      break;
+    case 6:
+      camera.position.set(0, -10, 0)
+      break;
+  }
+  camera.lookAt(0, 0, 0)
 }
 
 function changeAnimation() {
@@ -120,8 +146,7 @@ function createScene() {
   scene.add( axesHelper )
 
   camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.01, 2000)
-  camera.position.set(0, 0, 10)
-  camera.lookAt(0, 0, 0)
+  changeCamera(1)
   // controls = new OrbitControls( camera, renderer.domElement )
   // controls.minPolarAngle = Math.PI / 3
   // controls.maxPolarAngle = 0
@@ -224,7 +249,7 @@ function checkInputs() {
     for (const key of keysPressed) {
       switch (key.toLowerCase()) {
         case 'w':
-          if(camera.position.z > 0) {
+          if(cameraPos === 1) {
             pacman.rotation.y = Math.PI/2
           }
           break
@@ -250,34 +275,33 @@ window.addEventListener('keydown', (event) => {
 
 window.addEventListener('keyup', (event) => {
   keysPressed = keysPressed.filter(key => key != event.key.toLowerCase())
-  switch (event.key.toLowerCase()) {
-    case 'w':
-      break
-    case 'shift':
-      break
-  }
+  // switch (event.key.toLowerCase()) {
+  //   case 'w':
+  //     break
+  //   case 'shift':
+  //     break
+  // }
 })
 
-window.addEventListener('change', (event) => {
-  console.log(event)
-})
+// window.addEventListener('change', (event) => {
+//   console.log(event)
+// })
 
 function animate() {
   requestAnimationFrame( animate )
   if (mixer) mixer.update(0.02)
   
   if(pacman && camera) {
-    if(camera.position.z > 0) {
+    if(cameraPos === 1) {
       pacman.position.x += speed * Math.cos(pacman.rotation.y)
       pacman.position.y += speed * Math.sin(pacman.rotation.y)
-      if(pacman.position.x > 2) {
-        camera.position.set(10, 0, 0)
-        camera.lookAt(0, 0, 0)
+      if(pacman.position.x >= 2) {
+        changeCamera(3)
+      } else if(pacman.position.x <= -2) {
+        changeCamera(4)
       }
     }
   }
-  let ElapsedTime = clock.getElapsedTime();
-  let deltaTime = ElapsedTime - oldElapsedTime;
-  oldElapsedTime = deltaTime;  
+
   renderer.render( scene, camera )
 }
