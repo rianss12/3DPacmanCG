@@ -21,9 +21,6 @@ let selectedAnimation = 0
 let gltfAnimations
 let keysPressed = []
 let speed = 0.0035
-let offSet =  -5.0
-let clock = new THREE.Clock()
-let oldElapsedTime = 0
 let colors = [...Colors]
 let worldMap
 let pacman
@@ -180,32 +177,6 @@ function findAnimation (name) {
   return AnimationsMap[name]
 }
 
-function loadCharacter () {
-  const loader = new GLTFLoader()
-  loader.load('../../assets/fall_guys_1/scene.gltf', (gltf) => {
-    gltfAnimations = gltf.animations
-    fallGuy = gltf.scene
-    fallGuy.traverse((child) => {
-      child.frustumCulled = false
-      if (child.isMesh) {
-        child.castShadow = true
-      }
-    })
-    fallGuy.position.y = offSet
-    fallGuy.rotation.y = Math.PI/2
-    startAnimation()
-    scene.add(fallGuy)
-
-    sphereShape = new CANNON.Sphere(0)
-    sphereBody = new CANNON.Body({
-      mass: 1,
-      position: new CANNON.Vec3(0, 5, 0),
-      shape: sphereShape,
-    })
-
-    // spotLights[0].target = fallGuy
-  })
-}
 
 function loadWorld () {
   const loader = new GLTFLoader()
