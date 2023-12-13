@@ -249,24 +249,36 @@ function checkInputs() {
     for (const key of keysPressed) {
       switch (key.toLowerCase()) {
         case 'w':
-          if(cameraPos === 1) {
-            pacman.rotation.y = Math.PI/2
-          }
-          break
+              if(cameraPos === 1) {
+                pacman.rotation.y = Math.PI/2
+              }
+              break
         case 's':
+              if (camera.position.z > 0) {
+                  pacman.rotation.y = -Math.PI / 2;
+                  
+                  checkCollision();
+              }
+          break
+          case 'a':
+              if (camera.position.z > 2) {
+                  pacman.rotation.y = Math.PI;
+                  
+                  checkCollision();
+              }
           
           break
-        case 'a':
-          
-          break
-        case 'd':
+          case 'd':
+              if (camera.position.z > 2) {
+                  pacman.rotation.y = 0;
+                 
+              }
           
           break
       }
     }
   }, 1)
 }
-
 window.addEventListener('keydown', (event) => {
   if (!keysPressed.includes(event.key.toLowerCase())) {
     keysPressed.push(event.key.toLowerCase())
